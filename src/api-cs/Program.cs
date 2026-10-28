@@ -14,6 +14,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSingleton<SqliteConnectionFactory>();
 builder.Services.AddSingleton<DatabaseMigrator>();
 builder.Services.AddScoped<BranchesRepository>();
+builder.Services.AddScoped<CartRepository>();
 builder.Services.AddScoped<DeliveriesRepository>();
 builder.Services.AddScoped<HeadquartersRepository>();
 builder.Services.AddScoped<OrderDetailDeliveriesRepository>();

@@ -81,3 +81,10 @@ flowchart TD
 - Test mode: in-memory database (`:memory:`) for fast and isolated tests
 
 See the dedicated guide: `sqlite-integration.md`.
+
+## Shopping Cart
+
+- Implemented in `api-cs` only (`CartController`, `CartRepository`, migration `003_add_cart_items.sql`); the other API variants have no cart endpoints.
+- Single shared demo cart (no auth or per-user carts), persisted in the `cart_items` table with one row per product.
+- Endpoints: `GET /api/cart`, `POST /api/cart/items`, `PUT /api/cart/items/{productId}`, `DELETE /api/cart/items/{productId}`, `DELETE /api/cart`. Quantity must be 1-99.
+- Totals are computed server-side (unit price after discount, line total and subtotal rounded to 2 decimals); every mutation returns the full cart, which the frontend `useCart` hook writes into the react-query cache.

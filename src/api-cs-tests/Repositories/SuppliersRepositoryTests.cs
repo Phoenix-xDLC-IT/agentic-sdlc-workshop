@@ -7,6 +7,7 @@ using Xunit;
 
 namespace OctoSupply.Api.Tests.Repositories;
 
+[Collection("EnvDb")]
 public sealed class SuppliersRepositoryTests
 {
     [Fact]
