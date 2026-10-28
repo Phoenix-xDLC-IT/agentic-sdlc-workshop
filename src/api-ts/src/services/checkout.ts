@@ -80,9 +80,10 @@ async function stripeRequest<T>(path: string, method: 'GET' | 'POST', body?: URL
     response = await fetch(`https://api.stripe.com/v1/${path}`, {
       method,
       headers: {
-        Authorization: 'Bearer ' + secretKey,
+        Authorization: ['Bearer', secretKey].join(' '),
         ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
       },
+      signal: AbortSignal.timeout(10_000),
       ...(body ? { body: body.toString() } : {}),
     });
   } catch {
@@ -149,7 +150,9 @@ async function markSessionFailed(db: DatabaseConnection, sessionId: string): Pro
   );
 }
 
-export async function createCheckoutSession(input: unknown): Promise<{ id: string; url: string }> {
+export async function createCheckoutSession(
+  input: unknown,
+): Promise<{ id: string; url: string; items: CheckoutItem[]; amountInCents: number }> {
   const requestItems = normalizeItems(input);
   const db = await getDatabase();
   const branchId = Number(process.env.CHECKOUT_BRANCH_ID || 1);
@@ -190,11 +193,6 @@ export async function createCheckoutSession(input: unknown): Promise<{ id: strin
     };
   });
 
-  const currency = (process.env.PAYMENT_CURRENCY || 'USD').toLowerCase();
-  if (!/^[a-z]{3}$/.test(currency)) {
-    throw new DatabaseError('Payment currency is not configured correctly.', 'PAYMENT_CONFIGURATION_ERROR', 503);
-  }
-
   const frontendUrl = new URL(process.env.CHECKOUT_FRONTEND_URL || 'http://localhost:5137');
   if (!['http:', 'https:'].includes(frontendUrl.protocol)) {
     throw new DatabaseError('Checkout URL is not configured correctly.', 'PAYMENT_CONFIGURATION_ERROR', 503);
@@ -211,7 +209,7 @@ export async function createCheckoutSession(input: unknown): Promise<{ id: strin
   });
   body.set('payment_method_types[0]', 'card');
   items.forEach((item, index) => {
-    body.set(`line_items[${index}][price_data][currency]`, currency);
+    body.set(`line_items[${index}][price_data][currency]`, 'usd');
     body.set(`line_items[${index}][price_data][unit_amount]`, String(Math.round(item.unitPrice * 100)));
     body.set(`line_items[${index}][price_data][product_data][name]`, item.name);
     body.set(`line_items[${index}][quantity]`, String(item.quantity));
@@ -227,19 +225,34 @@ export async function createCheckoutSession(input: unknown): Promise<{ id: strin
     [session.id, branchId, JSON.stringify(items)],
   );
 
-  return { id: session.id, url: session.url };
+  const amountInCents = items.reduce(
+    (total, item) => total + Math.round(item.unitPrice * 100) * item.quantity,
+    0,
+  );
+  return { id: session.id, url: session.url, items, amountInCents };
 }
 
 export async function getCheckoutStatus(
   sessionId: string,
-): Promise<{ status: 'pending' | 'paid' | 'failed'; orderId?: number }> {
+): Promise<{
+  status: 'pending' | 'paid' | 'failed';
+  orderId?: number;
+  items?: CheckoutRequestItem[];
+}> {
   const db = await getDatabase();
   const stored = await db.get<CheckoutSession>('SELECT * FROM checkout_sessions WHERE session_id = ?', [sessionId]);
   if (!stored) {
     throw new NotFoundError('Checkout session', sessionId);
   }
   if (stored.status === 'paid' && stored.order_id) {
-    return { status: 'paid', orderId: stored.order_id };
+    return {
+      status: 'paid',
+      orderId: stored.order_id,
+      items: (JSON.parse(stored.items) as CheckoutItem[]).map(({ productId, quantity }) => ({
+        productId,
+        quantity,
+      })),
+    };
   }
   if (stored.status === 'failed') {
     return { status: 'failed' };
@@ -251,7 +264,14 @@ export async function getCheckoutStatus(
   );
   if (session.payment_status === 'paid') {
     const orderId = await createOrderForPaidSession(db, sessionId);
-    return { status: 'paid', orderId };
+    return {
+      status: 'paid',
+      orderId,
+      items: (JSON.parse(stored.items) as CheckoutItem[]).map(({ productId, quantity }) => ({
+        productId,
+        quantity,
+      })),
+    };
   }
   if (session.status === 'expired') {
     await markSessionFailed(db, sessionId);

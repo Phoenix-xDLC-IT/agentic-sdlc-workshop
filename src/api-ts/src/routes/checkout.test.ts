@@ -8,13 +8,6 @@ import { closeDatabase, getDatabase } from '../db/sqlite';
 import { errorHandler } from '../utils/errors';
 
 let app: express.Express;
-const originalEnv = {
-  PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
-  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
-  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
-  CHECKOUT_BRANCH_ID: process.env.CHECKOUT_BRANCH_ID,
-};
-
 function paymentResponse(data: unknown, ok = true) {
   return { ok, json: async () => data } as Response;
 }
@@ -36,10 +29,10 @@ describe('Checkout API', () => {
       ['Cat feeder', 'Smart feeder', 'FEEDER-1', 'each', 'feeder.png'],
     );
 
-    process.env.PAYMENT_PROVIDER = 'stripe';
-    process.env.STRIPE_SECRET_KEY = 'test-secret';
-    process.env.STRIPE_WEBHOOK_SECRET = 'test-webhook-secret';
-    process.env.CHECKOUT_BRANCH_ID = '1';
+    vi.stubEnv('PAYMENT_PROVIDER', 'stripe');
+    vi.stubEnv('STRIPE_SECRET_KEY', 'test-secret');
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'test-webhook-secret');
+    vi.stubEnv('CHECKOUT_BRANCH_ID', '1');
 
     app = express();
     app.use(
@@ -55,10 +48,7 @@ describe('Checkout API', () => {
 
   afterEach(async () => {
     vi.unstubAllGlobals();
-    for (const [key, value] of Object.entries(originalEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    vi.unstubAllEnvs();
     await closeDatabase();
   });
 
@@ -72,16 +62,22 @@ describe('Checkout API', () => {
       .post('/api/checkout/sessions')
       .send({ items: [{ productId: 1, quantity: 2 }] });
     expect(created.status).toBe(201);
-    expect(created.body).toEqual({
+    expect(created.body).toMatchObject({
       id: 'cs_test_paid',
       url: 'https://checkout.stripe.com/pay/cs_test_paid',
+      amountInCents: 3600,
+      items: [{ productId: 1, quantity: 2, name: 'Cat feeder', unitPrice: 18 }],
     });
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer ' + 'test-secret');
     expect(fetchMock.mock.calls[0][1].body).toContain('unit_amount%5D=1800');
 
     const confirmed = await request(app).get('/api/checkout/sessions/cs_test_paid');
     expect(confirmed.status).toBe(200);
-    expect(confirmed.body).toMatchObject({ status: 'paid', orderId: expect.any(Number) });
+    expect(confirmed.body).toMatchObject({
+      status: 'paid',
+      orderId: expect.any(Number),
+      items: [{ productId: 1, quantity: 2 }],
+    });
 
     const db = await getDatabase();
     const orders = await db.all<{ order_id: number }>('SELECT order_id FROM orders');
@@ -149,5 +145,20 @@ describe('Checkout API', () => {
     const db = await getDatabase();
     const orders = await db.all<{ order_id: number }>('SELECT order_id FROM orders');
     expect(orders).toHaveLength(1);
+  });
+
+  it('rejects webhooks with an invalid signature', async () => {
+    const event = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { id: 'cs_test_invalid', payment_status: 'paid' } },
+    });
+    const response = await request(app)
+      .post('/api/checkout/webhook')
+      .set('stripe-signature', `t=${Math.floor(Date.now() / 1000)},v1=${'0'.repeat(64)}`)
+      .set('Content-Type', 'application/json')
+      .send(event);
+
+    expect(response.status).toBe(400);
+    expect(await (await getDatabase()).get('SELECT order_id FROM orders')).toBeUndefined();
   });
 });

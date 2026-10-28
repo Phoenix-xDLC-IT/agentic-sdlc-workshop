@@ -55,7 +55,9 @@ export default function Products() {
     const quantity = quantities[productId] || 0;
     if (quantity > 0) {
       const product = products?.find((item) => item.productId === productId);
-      if (product) addItem(product, quantity);
+      if (product) {
+        addItem(product, quantity);
+      }
       setQuantities((prev) => ({
         ...prev,
         [productId]: 0,

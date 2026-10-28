@@ -22,7 +22,6 @@ Default API URL: `http://localhost:3000`
 - `PAYMENT_PROVIDER` (`stripe`, default: `stripe`)
 - `STRIPE_SECRET_KEY` (required; server-side Stripe API key)
 - `STRIPE_WEBHOOK_SECRET` (required to verify Stripe payment events)
-- `PAYMENT_CURRENCY` (three-letter currency code; default: `USD`)
 - `CHECKOUT_BRANCH_ID` (order branch ID; default: `1`)
 - `CHECKOUT_FRONTEND_URL` (frontend origin for checkout redirects; default: `http://localhost:5137`)
 

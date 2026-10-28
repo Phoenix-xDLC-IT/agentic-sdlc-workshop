@@ -22,7 +22,9 @@ const getBaseUrl = () => {
   }
 
   // Use Vite's same-origin proxy so Codespaces API ports can stay private.
-  if (import.meta.env.DEV) return '';
+  if (import.meta.env.DEV) {
+    return '';
+  }
 
   const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
   const protocolToUse = protocol.includes('https') ? 'https' : 'http';
@@ -45,6 +47,5 @@ export const api = {
     orderDetails: '/api/order-details',
     orderDetailDeliveries: '/api/order-detail-deliveries',
     checkoutSessions: '/api/checkout/sessions',
-    checkoutWebhook: '/api/checkout/webhook',
   },
 };

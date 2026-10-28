@@ -20,16 +20,22 @@ interface CartContextValue {
   addItem: (product: CartProduct, quantity: number) => void;
   setQuantity: (productId: number, quantity: number) => void;
   removeItem: (productId: number) => void;
-  clearCart: () => void;
+  removePurchasedItems: (
+    sessionId: string,
+    purchasedItems: Array<{ productId: number; quantity: number }>,
+  ) => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
 const STORAGE_KEY = 'octocat-cart';
+const PROCESSED_CHECKOUTS_KEY = 'octocat-processed-checkouts';
 
 function loadCart(): CartItem[] {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as unknown;
-    if (!Array.isArray(stored)) return [];
+    if (!Array.isArray(stored)) {
+      return [];
+    }
     return stored.filter(
       (item): item is CartItem =>
         item &&
@@ -55,8 +61,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
+  useEffect(() => {
+    const syncCart = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY || event.key === null) {
+        setItems(loadCart());
+      }
+    };
+    window.addEventListener('storage', syncCart);
+    return () => window.removeEventListener('storage', syncCart);
+  }, []);
+
   const addItem = (product: CartProduct, quantity: number) => {
-    if (quantity <= 0) return;
+    if (quantity <= 0) {
+      return;
+    }
     setItems((current) => {
       const existing = current.find((item) => item.productId === product.productId);
       return existing
@@ -84,7 +102,51 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const removeItem = (productId: number) => {
     setItems((current) => current.filter((item) => item.productId !== productId));
   };
-  const clearCart = useCallback(() => setItems([]), []);
+  const removePurchasedItems = useCallback(
+    (sessionId: string, purchasedItems: Array<{ productId: number; quantity: number }>) => {
+      try {
+        const processed = JSON.parse(localStorage.getItem(PROCESSED_CHECKOUTS_KEY) || '[]') as unknown;
+        if (Array.isArray(processed) && processed.includes(sessionId)) {
+          return;
+        }
+        const processedSessions = Array.isArray(processed)
+          ? processed.filter((id): id is string => typeof id === 'string')
+          : [];
+        localStorage.setItem(
+          PROCESSED_CHECKOUTS_KEY,
+          JSON.stringify([...processedSessions, sessionId].slice(-50)),
+        );
+      } catch {
+        // Continue clearing purchased quantities if storage is unavailable.
+      }
+
+      const purchasedQuantities = new Map<number, number>();
+      for (const item of purchasedItems) {
+        if (
+          Number.isSafeInteger(item.productId) &&
+          Number.isSafeInteger(item.quantity) &&
+          item.quantity > 0
+        ) {
+          purchasedQuantities.set(
+            item.productId,
+            (purchasedQuantities.get(item.productId) || 0) + item.quantity,
+          );
+        }
+      }
+
+      const updatedCart = loadCart().flatMap((item) => {
+          const remaining = item.quantity - (purchasedQuantities.get(item.productId) || 0);
+          return remaining > 0 ? [{ ...item, quantity: remaining }] : [];
+      });
+      setItems(updatedCart);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCart));
+      } catch {
+        // Keep the in-memory cart consistent when storage is unavailable.
+      }
+    },
+    [],
+  );
 
   const subtotal = items.reduce(
     (total, item) =>
@@ -101,7 +163,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         addItem,
         setQuantity,
         removeItem,
-        clearCart,
+        removePurchasedItems,
       }}
     >
       {children}
@@ -112,6 +174,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 // eslint-disable-next-line react-refresh/only-export-components
 export function useCart() {
   const context = useContext(CartContext);
-  if (!context) throw new Error('useCart must be used within a CartProvider');
+  if (!context) {
+    throw new Error('useCart must be used within a CartProvider');
+  }
   return context;
 }

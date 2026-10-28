@@ -9,12 +9,13 @@ import { useTheme } from '../context/ThemeContext';
 interface CheckoutStatus {
   status: 'pending' | 'paid' | 'failed';
   orderId?: number;
+  items?: Array<{ productId: number; quantity: number }>;
 }
 
 export default function CheckoutSuccess() {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
-  const { clearCart } = useCart();
+  const { removePurchasedItems } = useCart();
   const { darkMode } = useTheme();
   const { data, isLoading, isError } = useQuery<CheckoutStatus>(
     ['checkout-status', sessionId],
@@ -28,15 +29,22 @@ export default function CheckoutSuccess() {
   );
 
   useEffect(() => {
-    if (data?.status === 'paid') clearCart();
-  }, [data?.status, clearCart]);
+    if (data?.status === 'paid' && data.items && sessionId) {
+      removePurchasedItems(sessionId, data.items);
+    }
+  }, [data?.status, data?.items, removePurchasedItems, sessionId]);
 
   const textColor = darkMode ? 'text-light' : 'text-gray-800';
   let message = 'Checking your payment…';
-  if (!sessionId || isError) message = 'We could not confirm this payment. Your cart has been kept.';
-  else if (!isLoading && data?.status === 'paid') message = `Payment confirmed. Your order number is ${data.orderId}.`;
-  else if (data?.status === 'failed') message = 'Payment was declined or expired. Your cart is unchanged; please try again.';
-  else if (data?.status === 'pending') message = 'Payment confirmation is pending. This page will update automatically.';
+  if (!sessionId || isError) {
+    message = 'We could not confirm this payment. Your cart has been kept.';
+  } else if (!isLoading && data?.status === 'paid') {
+    message = `Payment confirmed. Your order number is ${data.orderId}.`;
+  } else if (data?.status === 'failed') {
+    message = 'Payment was declined or expired. Your cart is unchanged; please try again.';
+  } else if (data?.status === 'pending') {
+    message = 'Payment confirmation is pending. This page will update automatically.';
+  }
 
   return (
     <section className={`min-h-screen ${darkMode ? 'bg-dark' : 'bg-gray-100'} pt-24 pb-16 px-4`}>

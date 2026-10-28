@@ -25,7 +25,7 @@ import { createCheckoutSession, getCheckoutStatus, handleStripeWebhook } from '.
  *                     quantity: { type: integer, minimum: 1, maximum: 100 }
  *     responses:
  *       201:
- *         description: Hosted payment URL and session ID
+ *         description: Hosted payment URL, session ID, and server-calculated order total
  *       400:
  *         description: Invalid cart
  *       503:
