@@ -632,6 +632,97 @@
                 }
             }
         },
+        "/api/checkout/sessions": {
+            "post": {
+                "summary": "Create a secure Stripe Checkout session",
+                "tags": [
+                    "Checkout"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "items"
+                                ],
+                                "properties": {
+                                    "items": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "productId",
+                                                "quantity"
+                                            ],
+                                            "properties": {
+                                                "productId": {
+                                                    "type": "integer",
+                                                    "minimum": 1
+                                                },
+                                                "quantity": {
+                                                    "type": "integer",
+                                                    "minimum": 1,
+                                                    "maximum": 100
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Hosted payment URL, session ID, and server-calculated order total"
+                    },
+                    "400": {
+                        "description": "Invalid cart"
+                    },
+                    "503": {
+                        "description": "Payment provider is not configured"
+                    }
+                }
+            }
+        },
+        "/api/checkout/sessions/{id}": {
+            "get": {
+                "summary": "Verify payment and retrieve checkout status",
+                "tags": [
+                    "Checkout"
+                ],
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Payment status and, when paid, order ID"
+                    }
+                }
+            }
+        },
+        "/api/checkout/webhook": {
+            "post": {
+                "summary": "Receive signed Stripe Checkout events",
+                "tags": [
+                    "Checkout"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Event accepted"
+                    }
+                }
+            }
+        },
         "/api/orders": {
             "get": {
                 "summary": "Returns all orders",

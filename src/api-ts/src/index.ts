@@ -7,6 +7,7 @@ import orderDetailDeliveryRoutes from './routes/orderDetailDelivery';
 import productRoutes from './routes/product';
 import orderDetailRoutes from './routes/orderDetail';
 import orderRoutes from './routes/order';
+import checkoutRoutes from './routes/checkout';
 import branchRoutes from './routes/branch';
 import headquartersRoutes from './routes/headquarters';
 import supplierRoutes from './routes/supplier';
@@ -70,13 +71,20 @@ app.get('/api-docs.json', (req, res) => {
   res.send(swaggerDocs);
 });
 
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, _res, buffer) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+    },
+  }),
+);
 
 app.use('/api/deliveries', deliveryRoutes);
 app.use('/api/order-detail-deliveries', orderDetailDeliveryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/order-details', orderDetailRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/checkout', checkoutRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/headquarters', headquartersRoutes);
 app.use('/api/suppliers', supplierRoutes);
