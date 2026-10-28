@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useQuery } from 'react-query';
 import { api } from '../../../api/config';
 import { useTheme } from '../../../context/ThemeContext';
+import { useCart } from '../../../hooks/useCart';
 
 interface Product {
   productId: number;
@@ -28,6 +29,7 @@ export default function Products() {
   const [showModal, setShowModal] = useState(false);
   const { data: products, isLoading, error } = useQuery('products', fetchProducts);
   const { darkMode } = useTheme();
+  const { addItem } = useCart();
 
   const filteredProducts = products?.filter(
     (product) =>
@@ -52,12 +54,12 @@ export default function Products() {
   const handleAddToCart = (productId: number) => {
     const quantity = quantities[productId] || 0;
     if (quantity > 0) {
-      // TODO: Implement cart functionality
-      alert(`Added ${quantity} items to cart`);
-      setQuantities((prev) => ({
-        ...prev,
-        [productId]: 0,
-      }));
+      addItem.mutate(
+        { productId, quantity },
+        {
+          onSuccess: () => setQuantities((prev) => ({ ...prev, [productId]: 0 })),
+        },
+      );
     }
   };
 
@@ -125,6 +127,17 @@ export default function Products() {
               <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
             </svg>
           </div>
+
+          {addItem.isError && (
+            <div role="alert" className="text-red-500 text-center">
+              Could not add item to cart. Please try again.
+            </div>
+          )}
+          {addItem.isSuccess && (
+            <div aria-live="polite" className="text-primary text-center">
+              Added to cart.
+            </div>
+          )}
 
           {/* Empty state when no products match */}
           {(!filteredProducts || filteredProducts.length === 0) && (
@@ -241,7 +254,7 @@ export default function Products() {
                           ? 'bg-primary hover:bg-accent text-white'
                           : `${darkMode ? 'bg-gray-700 text-gray-400' : 'bg-gray-200 text-gray-500'} cursor-not-allowed`
                           }`}
-                        disabled={!quantities[product.productId]}
+                        disabled={!quantities[product.productId] || addItem.isLoading}
                         aria-label={`Add ${quantities[product.productId] || 0} ${product.name} to cart`}
                         id={`add-to-cart-${product.productId}`}
                       >
