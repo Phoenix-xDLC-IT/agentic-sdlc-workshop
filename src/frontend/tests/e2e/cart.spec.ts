@@ -5,6 +5,49 @@ import { test, expect } from '@playwright/test';
  * Covers add, update quantity, remove, and server-computed totals.
  */
 
+const apiBase = () =>
+  process.env.PLAYWRIGHT_API_URL ?? process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5137';
+
+test.describe('Cart API error paths', () => {
+  test.beforeEach(async ({ request }) => {
+    await request.delete(`${apiBase()}/api/cart`);
+  });
+
+  test('rejects invalid quantities with 400 and leaves the cart unchanged', async ({ request }) => {
+    for (const quantity of [0, -1, 100]) {
+      const res = await request.post(`${apiBase()}/api/cart/items`, { data: { productId: 1, quantity } });
+      expect(res.status()).toBe(400);
+    }
+    const cart = await (await request.get(`${apiBase()}/api/cart`)).json();
+    expect(cart.items).toHaveLength(0);
+    expect(cart.subtotal).toBe(0);
+  });
+
+  test('returns 404 for unknown products and cart lines', async ({ request }) => {
+    const add = await request.post(`${apiBase()}/api/cart/items`, { data: { productId: 999999, quantity: 1 } });
+    expect(add.status()).toBe(404);
+    const update = await request.put(`${apiBase()}/api/cart/items/999999`, { data: { quantity: 1 } });
+    expect(update.status()).toBe(404);
+    const remove = await request.delete(`${apiBase()}/api/cart/items/999999`);
+    expect(remove.status()).toBe(404);
+  });
+
+  test('rejects malformed bodies and non-numeric ids', async ({ request }) => {
+    const malformed = await request.post(`${apiBase()}/api/cart/items`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: '{not json',
+    });
+    expect(malformed.status()).toBe(400);
+    const wrongType = await request.post(`${apiBase()}/api/cart/items`, {
+      data: { productId: 'abc', quantity: 'x' },
+    });
+    expect(wrongType.status()).toBe(400);
+    const badId = await request.delete(`${apiBase()}/api/cart/items/abc`);
+    expect(badId.status()).toBeGreaterThanOrEqual(400);
+    expect(badId.status()).toBeLessThan(500);
+  });
+});
+
 test.describe('Cart', () => {
   test.beforeEach(async ({ page, request }) => {
     const apiURL =
